@@ -19,8 +19,8 @@ from tinyredis.protocol import *
 
     # Test cases for Errors
     (b"-Err", (None, 0)),
-    (b"-Error Message\r\n", (SimpleError("Error Message"), 16)),
-    (b"-Error Message\r\n+Other", (SimpleError("Error Message"), 16)),
+    (b"-Error Message\r\n", (Error("Error Message"), 16)),
+    (b"-Error Message\r\n+Other", (Error("Error Message"), 16)),
 
     # Test cases for Integers
     (b":10", (None, 0)),
@@ -60,6 +60,6 @@ from tinyredis.protocol import *
 ])
 
 
-def test_read_frame_simple_string_extra_data(buffer, expected):
+def test_read_frame(buffer, expected):
     actual = extract_frame_from_buffer(buffer)
     assert actual == expected

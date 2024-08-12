@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-MESSAGE_SEPARATOR = b"\r\n"
+_MSG_SEPARATOR = b"\r\n"
+_MESSAGE_SEPARATOR_SIZE = len(b"\r\n")
 
 @dataclass
 class BulkString:
@@ -15,63 +16,64 @@ class Integer:
     data: int
 
 @dataclass
-class SimpleError:
+class Error:
     data: str
 
 @dataclass
 class Array:
     data: list[Integer|SimpleString|BulkString] | None
 
-def extract_frame_from_buffer(buffer: bytes):
 
-    if MESSAGE_SEPARATOR not in buffer:
+def extract_frame_from_buffer(buffer: bytes):
+    separator = buffer.find(_MSG_SEPARATOR)
+
+    if _MSG_SEPARATOR not in buffer or separator == -1:
         return None, 0
+    else:
+        payload = buffer[1:separator].decode()
+
+
 
     match chr(buffer[0]):
         case '+': # Simple Strings
-            sep = buffer.find(MESSAGE_SEPARATOR)
-            if sep != -1:
-                return SimpleString(buffer[1:sep].decode()), sep + 2
+            return SimpleString(payload), separator + _MESSAGE_SEPARATOR_SIZE
+
         case '-': # Errors
-            sep = buffer.find(MESSAGE_SEPARATOR)
-            if sep != -1:
-                return SimpleError(buffer[1:sep].decode()), sep + 2
+            return Error(payload), separator + _MESSAGE_SEPARATOR_SIZE
+
         case ':': # Integers
-            sep = buffer.find(MESSAGE_SEPARATOR)
-            if sep != -1:
-                return Integer(int(buffer[1:sep])), sep + 2
+
+            return Integer(int(payload)), separator + _MESSAGE_SEPARATOR_SIZE
+
         case '$': # Bulk strings
-            sep = buffer.find(MESSAGE_SEPARATOR)
-            array_length = int(buffer[1:sep])
-            data = buffer[sep + 2:sep + 2 + array_length]
+            array_length = int(payload)
+
+            data = buffer[separator + _MESSAGE_SEPARATOR_SIZE:separator + _MESSAGE_SEPARATOR_SIZE + array_length]
 
             if array_length == -1: # Null Bulk String
-                return BulkString(None), sep + 2
+                return BulkString(None), separator + _MESSAGE_SEPARATOR_SIZE
 
             if len(data) == array_length:
-                return BulkString(data), sep + 2 + array_length + 2
+                return BulkString(data), separator + _MESSAGE_SEPARATOR_SIZE + array_length + _MESSAGE_SEPARATOR_SIZE
 
         case '*': # Arrays
             arr = []
 
-            sep = buffer.find(MESSAGE_SEPARATOR)
-            array_length = int(buffer[1:sep])
+            array_length = int(payload)
 
             # Null Array
             if array_length == -1:
-                return Array(None), sep + 2
+                return Array(None), separator + _MESSAGE_SEPARATOR_SIZE
 
             for _ in range(array_length):
-                frame, offset = extract_frame_from_buffer(buffer[sep + 2:])
+                frame, offset = extract_frame_from_buffer(buffer[separator + _MESSAGE_SEPARATOR_SIZE:])
                 arr.append(frame)
-                sep += offset
+                separator += offset
 
             # Return None if any element in the array is None
             if None in arr:
                 return None, 0
 
-            return Array(arr), sep + 2
-
-
+            return Array(arr), separator + _MESSAGE_SEPARATOR_SIZE
 
     return None, 0
