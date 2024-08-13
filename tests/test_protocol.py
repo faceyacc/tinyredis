@@ -2,10 +2,6 @@ import pytest
 from tinyredis.protocol import *
 
 
-# "$-1\r\n"
-# "*1\r\n$4\r\nping\r\n”
-# "*2\r\n$4\r\necho\r\n$5\r\nhello world\r\n”
-# "*2\r\n$3\r\nget\r\n$3\r\nkey\r\n”
 
 
 @pytest.mark.parametrize("buffer, expected", [
@@ -38,7 +34,7 @@ from tinyredis.protocol import *
     # Test case for Arrays
     (b"*0", (None, 0)),
     (b"*0\r\n", (Array([]), 4)),
-    (b"*-1\r\n", (Array(None), 5)),
+    (b"*-1\r\n", (Array(None), 5)), # type: ignore
     (b"*2\r\n$5\r\nhello\r\n$5\r\n", (None, 0)),
     (
         b"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n",
@@ -59,7 +55,25 @@ from tinyredis.protocol import *
     ),
 ])
 
-
 def test_read_frame(buffer, expected):
     actual = extract_frame_from_buffer(buffer)
     assert actual == expected
+
+@pytest.mark.parametrize("message, expected", [
+    (SimpleString("OK"), b"+OK\r\n"),
+    (Error("Error Message"), b"-Error Message\r\n"),
+    (Integer(100), b":100\r\n"),
+    (BulkString("Mi nombre es"), b"$12\r\nMi nombre es\r\n"),
+    (BulkString(""), b"$0\r\n\r\n"),
+    (BulkString(None), b"$-1\r\n"),
+    (Array([]), b"*0\r\n"),
+    (Array(None), b"*-1\r\n"),
+    (
+        Array([SimpleString("String"), Integer(2), SimpleString("String2")]),
+        b"*3\r\n+String\r\n:2\r\n+String2\r\n",
+    ),
+])
+
+def test_encoded_message(message, expected):
+    encoded_message = encode_message(message)
+    assert encoded_message == expected

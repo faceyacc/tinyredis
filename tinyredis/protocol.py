@@ -5,7 +5,7 @@ _MESSAGE_SEPARATOR_SIZE = len(b"\r\n")
 
 @dataclass
 class BulkString:
-    data: bytes | None
+    data: bytes
 
 @dataclass
 class SimpleString:
@@ -21,18 +21,22 @@ class Error:
 
 @dataclass
 class Array:
-    data: list[Integer|SimpleString|BulkString] | None
+    data: list
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __len__(self):
+        return len(self.data)
 
 
 def extract_frame_from_buffer(buffer: bytes):
     separator = buffer.find(_MSG_SEPARATOR)
 
-    if _MSG_SEPARATOR not in buffer or separator == -1:
+    if separator == -1:
         return None, 0
     else:
         payload = buffer[1:separator].decode()
-
-
 
     match chr(buffer[0]):
         case '+': # Simple Strings
@@ -63,7 +67,7 @@ def extract_frame_from_buffer(buffer: bytes):
 
             # Null Array
             if array_length == -1:
-                return Array(None), separator + _MESSAGE_SEPARATOR_SIZE
+                return Array(None), separator + _MESSAGE_SEPARATOR_SIZE # type: ignore
 
             for _ in range(array_length):
                 frame, offset = extract_frame_from_buffer(buffer[separator + _MESSAGE_SEPARATOR_SIZE:])
@@ -77,3 +81,27 @@ def extract_frame_from_buffer(buffer: bytes):
             return Array(arr), separator + _MESSAGE_SEPARATOR_SIZE
 
     return None, 0
+
+
+
+def encode_message(message):
+    if isinstance(message, SimpleString):
+        return f"+{message.data}\r\n".encode()
+
+    if isinstance(message, Error):
+        return f"-{message.data}\r\n".encode()
+
+    if isinstance(message, Integer):
+        return f":{message.data}\r\n".encode()
+
+    if isinstance(message, BulkString):
+        if message.data is None:
+            return b"$-1\r\n"
+        return f"${len(message.data)}\r\n{message.data}\r\n".encode()
+
+    if isinstance(message, Array):
+        if message.data is None:
+            return b"*-1\r\n"
+        return f"*{len(message.data)}\r\n".encode() + b"".join([encode_message(m) for m in message.data]) # type: ignore
+
+    return None
