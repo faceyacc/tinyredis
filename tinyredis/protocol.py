@@ -7,17 +7,32 @@ _MESSAGE_SEPARATOR_SIZE = len(b"\r\n")
 class BulkString:
     data: bytes
 
+    def resp_encode(self):
+        if self.data is None:
+            return b"$-1\r\n"
+        return f"${len(self.data)}\r\n{self.data}\r\n".encode()
+
+
 @dataclass
 class SimpleString:
     data: str
+
+    def resp_encode(self):
+            return f"+{self.data}\r\n".encode()
 
 @dataclass
 class Integer:
     data: int
 
+    def resp_encode(self):
+            return f":{self.data}\r\n".encode()
+
 @dataclass
 class Error:
     data: str
+
+    def resp_encode(self):
+            return f"-{self.data}\r\n".encode()
 
 @dataclass
 class Array:
@@ -29,8 +44,22 @@ class Array:
     def __len__(self):
         return len(self.data)
 
+    def resp_encode(self):
+        if self.data is None:
+            return b"*-1\r\n"
+        return f"*{len(self.data)}\r\n".encode() + b"".join([encode_message(m) for m in self.data]) # type: ignore
+
 
 def extract_frame_from_buffer(buffer: bytes):
+    """
+    Extracts RESP dataclass type and the offset from the buffer.
+
+    Args:
+        buffer (bytes): The buffer containing the RESP message.
+
+    Returns:
+        tuple: A tuple containing the RESP dataclass type and the lenth of bytes plus offset.
+    """
     separator = buffer.find(_MSG_SEPARATOR)
 
     if separator == -1:
@@ -85,23 +114,34 @@ def extract_frame_from_buffer(buffer: bytes):
 
 
 def encode_message(message):
-    if isinstance(message, SimpleString):
-        return f"+{message.data}\r\n".encode()
+    """
+    Encodes a message to the RESP protocol
 
-    if isinstance(message, Error):
-        return f"-{message.data}\r\n".encode()
+    Args:
+        message (dataclass): The message to encode
 
-    if isinstance(message, Integer):
-        return f":{message.data}\r\n".encode()
+    Returns:
+        bytes: The encoded message
+    """
 
-    if isinstance(message, BulkString):
-        if message.data is None:
-            return b"$-1\r\n"
-        return f"${len(message.data)}\r\n{message.data}\r\n".encode()
+    return message.resp_encode()
+    # if isinstance(message, SimpleString):
+    #     return
 
-    if isinstance(message, Array):
-        if message.data is None:
-            return b"*-1\r\n"
-        return f"*{len(message.data)}\r\n".encode() + b"".join([encode_message(m) for m in message.data]) # type: ignore
+    # if isinstance(message, Error):
+    #     return f"-{message.data}\r\n".encode()
 
-    return None
+    # if isinstance(message, Integer):
+    #     return f":{message.data}\r\n".encode()
+
+    # if isinstance(message, BulkString):
+    #     if message.data is None:
+    #         return b"$-1\r\n"
+    #     return f"${len(message.data)}\r\n{message.data}\r\n".encode()
+
+    # if isinstance(message, Array):
+    #     if message.data is None:
+    #         return b"*-1\r\n"
+    #     return f"*{len(message.data)}\r\n".encode() + b"".join([encode_message(m) for m in message.data]) # type: ignore
+
+    # return None
